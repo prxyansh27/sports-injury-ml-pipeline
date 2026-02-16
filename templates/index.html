@@ -1,0 +1,539 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>AthleteSense — Injury Risk Predictor</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet"/>
+  <style>
+    /* ── Reset & Base ────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:        #09090f;
+      --surface:   #111119;
+      --border:    #1e1e2e;
+      --muted:     #3a3a52;
+      --text:      #e8e8f0;
+      --subtle:    #888899;
+      --accent:    #00e5ff;
+      --danger:    #ff3b5c;
+      --safe:      #00e676;
+      --warn:      #ffab00;
+      --font-head: 'Bebas Neue', sans-serif;
+      --font-body: 'DM Sans', sans-serif;
+      --font-mono: 'JetBrains Mono', monospace;
+      --radius:    10px;
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      font-family: var(--font-body);
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    /* ── Animated background grid ────────────────────── */
+    body::before {
+      content: '';
+      position: fixed; inset: 0; z-index: 0;
+      background-image:
+        linear-gradient(var(--border) 1px, transparent 1px),
+        linear-gradient(90deg, var(--border) 1px, transparent 1px);
+      background-size: 48px 48px;
+      opacity: 0.35;
+      animation: gridDrift 40s linear infinite;
+    }
+    @keyframes gridDrift {
+      from { background-position: 0 0; }
+      to   { background-position: 48px 48px; }
+    }
+
+    /* ── Layout ──────────────────────────────────────── */
+    .wrapper {
+      position: relative; z-index: 1;
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 0 24px 80px;
+    }
+
+    /* ── Header ──────────────────────────────────────── */
+    header {
+      padding: 48px 0 40px;
+      display: flex;
+      align-items: flex-end;
+      gap: 20px;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 48px;
+    }
+    .logo-mark {
+      width: 52px; height: 52px;
+      background: var(--accent);
+      border-radius: 12px;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+    }
+    .logo-mark svg { width: 28px; height: 28px; }
+    .brand h1 {
+      font-family: var(--font-head);
+      font-size: 2.8rem;
+      letter-spacing: 0.04em;
+      line-height: 1;
+      color: #fff;
+    }
+    .brand p {
+      font-size: 0.85rem;
+      color: var(--subtle);
+      margin-top: 4px;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
+    .badge {
+      margin-left: auto;
+      font-family: var(--font-mono);
+      font-size: 0.72rem;
+      padding: 6px 12px;
+      border: 1px solid var(--accent);
+      color: var(--accent);
+      border-radius: 20px;
+      letter-spacing: 0.06em;
+      white-space: nowrap;
+    }
+
+    /* ── Two-column layout ───────────────────────────── */
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr 360px;
+      gap: 28px;
+      align-items: start;
+    }
+    @media (max-width: 800px) {
+      .grid { grid-template-columns: 1fr; }
+      .sidebar { order: -1; }
+    }
+
+    /* ── Card ────────────────────────────────────────── */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 28px 32px;
+      animation: fadeUp 0.5s ease both;
+    }
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(20px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    .card-title {
+      font-family: var(--font-head);
+      font-size: 1.3rem;
+      letter-spacing: 0.05em;
+      color: var(--accent);
+      margin-bottom: 20px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .card-title::before {
+      content: '';
+      display: block;
+      width: 4px; height: 20px;
+      background: var(--accent);
+      border-radius: 2px;
+    }
+
+    /* ── Form grid ───────────────────────────────────── */
+    .form-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+    }
+    @media (max-width: 560px) { .form-grid { grid-template-columns: 1fr; } }
+
+    .field {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .field label {
+      font-size: 0.78rem;
+      color: var(--subtle);
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      font-weight: 600;
+    }
+    .field input {
+      background: var(--bg);
+      border: 1px solid var(--muted);
+      border-radius: var(--radius);
+      color: var(--text);
+      font-family: var(--font-mono);
+      font-size: 0.92rem;
+      padding: 10px 14px;
+      transition: border-color 0.2s, box-shadow 0.2s;
+      outline: none;
+      -moz-appearance: textfield;
+    }
+    .field input::-webkit-outer-spin-button,
+    .field input::-webkit-inner-spin-button { -webkit-appearance: none; }
+    .field input:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(0,229,255,0.12);
+    }
+    .field .hint {
+      font-size: 0.7rem;
+      color: var(--muted);
+      font-family: var(--font-mono);
+    }
+
+    /* ── Errors ──────────────────────────────────────── */
+    .errors {
+      background: rgba(255,59,92,0.08);
+      border: 1px solid rgba(255,59,92,0.35);
+      border-radius: var(--radius);
+      padding: 14px 18px;
+      margin-bottom: 20px;
+      animation: fadeUp 0.3s ease;
+    }
+    .errors p {
+      font-size: 0.82rem;
+      color: var(--danger);
+      margin-bottom: 4px;
+    }
+    .errors p:last-child { margin-bottom: 0; }
+
+    /* ── Submit button ───────────────────────────────── */
+    .btn-submit {
+      margin-top: 24px;
+      width: 100%;
+      padding: 14px;
+      background: var(--accent);
+      color: #000;
+      border: none;
+      border-radius: var(--radius);
+      font-family: var(--font-head);
+      font-size: 1.15rem;
+      letter-spacing: 0.1em;
+      cursor: pointer;
+      transition: transform 0.15s, box-shadow 0.2s, background 0.2s;
+      position: relative;
+      overflow: hidden;
+    }
+    .btn-submit:hover {
+      background: #33eeff;
+      transform: translateY(-2px);
+      box-shadow: 0 8px 30px rgba(0,229,255,0.35);
+    }
+    .btn-submit:active { transform: translateY(0); }
+
+    /* ── Sidebar result ──────────────────────────────── */
+    .sidebar { display: flex; flex-direction: column; gap: 20px; }
+
+    /* ── Risk meter ──────────────────────────────────── */
+    .risk-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 28px;
+      text-align: center;
+      animation: fadeUp 0.5s ease 0.1s both;
+    }
+    .risk-label {
+      font-family: var(--font-head);
+      font-size: 2.4rem;
+      letter-spacing: 0.06em;
+      margin: 12px 0 8px;
+    }
+    .risk-label.high { color: var(--danger); }
+    .risk-label.low  { color: var(--safe);  }
+
+    /* Gauge */
+    .gauge-wrap { position: relative; width: 180px; margin: 0 auto 8px; }
+    .gauge-wrap svg { width: 100%; }
+    .gauge-pct {
+      position: absolute;
+      inset: 0;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+    }
+    .gauge-pct span {
+      font-family: var(--font-head);
+      font-size: 2.2rem;
+      line-height: 1;
+    }
+    .gauge-pct small {
+      font-family: var(--font-mono);
+      font-size: 0.65rem;
+      color: var(--subtle);
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    /* Confidence bar */
+    .conf-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-top: 16px;
+      font-size: 0.78rem;
+      color: var(--subtle);
+    }
+    .conf-row span { width: 80px; text-align: right; font-family: var(--font-mono); }
+    .conf-bar-bg {
+      flex: 1; height: 8px;
+      background: var(--border);
+      border-radius: 4px;
+      overflow: hidden;
+    }
+    .conf-bar-fill {
+      height: 100%;
+      border-radius: 4px;
+      transition: width 1s cubic-bezier(.4,0,.2,1);
+    }
+    .conf-bar-fill.high { background: var(--danger); }
+    .conf-bar-fill.low  { background: var(--safe);  }
+
+    /* ── Info tiles ──────────────────────────────────── */
+    .info-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 22px;
+      animation: fadeUp 0.5s ease 0.2s both;
+    }
+    .info-card h3 {
+      font-family: var(--font-head);
+      font-size: 0.95rem;
+      letter-spacing: 0.06em;
+      color: var(--accent);
+      margin-bottom: 14px;
+    }
+    .feat-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+    .feat-row:last-child { margin-bottom: 0; }
+    .feat-name {
+      font-size: 0.76rem;
+      color: var(--subtle);
+      width: 130px;
+      flex-shrink: 0;
+    }
+    .feat-bar-bg {
+      flex: 1; height: 6px;
+      background: var(--border);
+      border-radius: 3px;
+      overflow: hidden;
+    }
+    .feat-bar-fill {
+      height: 100%;
+      background: linear-gradient(90deg, var(--accent), #0088ff);
+      border-radius: 3px;
+    }
+    .feat-pct {
+      font-family: var(--font-mono);
+      font-size: 0.7rem;
+      color: var(--subtle);
+      width: 36px;
+      text-align: right;
+    }
+
+    /* ── Empty state ─────────────────────────────────── */
+    .empty-state {
+      padding: 40px 20px;
+      text-align: center;
+      color: var(--muted);
+    }
+    .empty-state svg { opacity: 0.3; margin-bottom: 12px; }
+    .empty-state p { font-size: 0.85rem; line-height: 1.6; }
+
+    /* ── Footer ──────────────────────────────────────── */
+    footer {
+      margin-top: 64px;
+      padding-top: 24px;
+      border-top: 1px solid var(--border);
+      text-align: center;
+      font-size: 0.78rem;
+      color: var(--muted);
+      letter-spacing: 0.04em;
+    }
+    footer a { color: var(--accent); text-decoration: none; }
+
+    /* ── Pulse glow on high risk ─────────────────────── */
+    @keyframes dangerPulse {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(255,59,92,0); }
+      50%       { box-shadow: 0 0 0 10px rgba(255,59,92,0.12); }
+    }
+    .risk-card.high-risk { animation: fadeUp 0.5s ease 0.1s both, dangerPulse 2.5s ease 0.5s infinite; }
+  </style>
+</head>
+<body>
+<div class="wrapper">
+
+  <!-- Header -->
+  <header>
+    <div class="logo-mark">
+      <svg viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
+      </svg>
+    </div>
+    <div class="brand">
+      <h1>AthleteSense</h1>
+      <p>Sports Injury Risk Predictor · Random Forest ML</p>
+    </div>
+    <div class="badge">v1.0 · 600 Athletes</div>
+  </header>
+
+  <!-- Main grid -->
+  <div class="grid">
+
+    <!-- ── LEFT: Form ── -->
+    <div>
+      <div class="card">
+        <div class="card-title">Athlete Profile</div>
+
+        {% if errors %}
+        <div class="errors">
+          {% for e in errors %}
+          <p>⚠ {{ e }}</p>
+          {% endfor %}
+        </div>
+        {% endif %}
+
+        <form method="POST" action="/predict">
+          <div class="form-grid">
+
+            {% for feat in features %}
+            <div class="field">
+              <label for="{{ feat.name }}">{{ feat.label }}</label>
+              <input
+                type="number"
+                id="{{ feat.name }}"
+                name="{{ feat.name }}"
+                min="{{ feat.min }}"
+                max="{{ feat.max }}"
+                step="{{ feat.step }}"
+                value="{{ form_values[feat.name] if form_values and feat.name in form_values else '' }}"
+                placeholder="{{ feat.min }}–{{ feat.max }}"
+              />
+              <span class="hint">Range: {{ feat.min }} – {{ feat.max }}</span>
+            </div>
+            {% endfor %}
+
+          </div>
+          <button type="submit" class="btn-submit">ANALYZE INJURY RISK →</button>
+        </form>
+      </div>
+    </div>
+
+    <!-- ── RIGHT: Sidebar ── -->
+    <div class="sidebar">
+
+      {% if result %}
+
+      <!-- Risk result card -->
+      <div class="risk-card {{ 'high-risk' if result.is_high_risk else '' }}">
+        <div style="font-size:0.78rem; color: var(--subtle); text-transform:uppercase; letter-spacing:0.08em;">
+          Prediction Result
+        </div>
+
+        <!-- SVG Gauge -->
+        {% set pct = result.high_risk_pct if result.is_high_risk else result.low_risk_pct %}
+        {% set color = '#ff3b5c' if result.is_high_risk else '#00e676' %}
+        {% set angle = (pct / 100) * 251.2 %}
+        <div class="gauge-wrap">
+          <svg viewBox="0 0 100 100">
+            <circle cx="50" cy="50" r="40" fill="none" stroke="#1e1e2e" stroke-width="10"/>
+            <circle cx="50" cy="50" r="40" fill="none"
+              stroke="{{ color }}"
+              stroke-width="10"
+              stroke-dasharray="{{ angle }} {{ 251.2 - angle }}"
+              stroke-dashoffset="62.8"
+              stroke-linecap="round"
+              transform="rotate(-90 50 50)"
+              style="transition: stroke-dasharray 1.2s cubic-bezier(.4,0,.2,1);"
+            />
+          </svg>
+          <div class="gauge-pct">
+            <span style="color: {{ color }}">{{ pct }}%</span>
+            <small>Confidence</small>
+          </div>
+        </div>
+
+        <div class="risk-label {{ 'high' if result.is_high_risk else 'low' }}">
+          {{ result.label }}
+        </div>
+
+        <!-- Prob bars -->
+        <div class="conf-row">
+          <span>High Risk</span>
+          <div class="conf-bar-bg">
+            <div class="conf-bar-fill high" style="width: {{ result.high_risk_pct }}%"></div>
+          </div>
+          <span style="width:40px;text-align:left">{{ result.high_risk_pct }}%</span>
+        </div>
+        <div class="conf-row">
+          <span>Low Risk</span>
+          <div class="conf-bar-bg">
+            <div class="conf-bar-fill low" style="width: {{ result.low_risk_pct }}%"></div>
+          </div>
+          <span style="width:40px;text-align:left">{{ result.low_risk_pct }}%</span>
+        </div>
+      </div>
+
+      {% else %}
+
+      <!-- Empty state -->
+      <div class="risk-card">
+        <div class="empty-state">
+          <svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
+          </svg>
+          <p>Fill in the athlete profile and click <strong>Analyze</strong> to see injury risk prediction and confidence score.</p>
+        </div>
+      </div>
+
+      {% endif %}
+
+      <!-- Feature importance -->
+      <div class="info-card">
+        <h3>TOP RISK FACTORS</h3>
+
+        {% set features_imp = [
+          ("Injury History",     31.0),
+          ("Training Intensity", 21.0),
+          ("Muscle Asymmetry",   12.1),
+          ("Sleep Hours",        10.9),
+          ("BMI",                 3.3),
+          ("Flexibility Score",   2.9)
+        ] %}
+        {% for name, imp in features_imp %}
+        <div class="feat-row">
+          <div class="feat-name">{{ name }}</div>
+          <div class="feat-bar-bg">
+            <div class="feat-bar-fill" style="width: {{ imp / 31 * 100 }}%"></div>
+          </div>
+          <div class="feat-pct">{{ imp }}%</div>
+        </div>
+        {% endfor %}
+      </div>
+
+    </div>
+    <!-- end sidebar -->
+
+  </div>
+
+  <footer>
+    Built with <a href="https://flask.palletsprojects.com">Flask</a> + <a href="https://scikit-learn.org">scikit-learn</a> ·
+    Random Forest Classifier · Dataset: 600 Athletes · 15 Features
+  </footer>
+
+</div>
+</body>
+</html>

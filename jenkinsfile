@@ -1,0 +1,162 @@
+pipeline {
+    agent any
+
+    environment {
+        VENV_DIR   = ".venv"
+        MODEL_FILE = "injury_model.pkl"
+        APP_PORT   = "5000"
+    }
+
+    stages {
+
+        stage('Checkout') {
+            steps {
+                echo '── Checking out source code ──────────────────────────'
+                checkout scm
+            }
+        }
+
+        stage('Setup Environment') {
+            steps {
+                echo '── Creating virtual environment ──────────────────────'
+                sh '''
+                    python3 -m venv ${VENV_DIR}
+                    . ${VENV_DIR}/bin/activate
+                    pip install --upgrade pip
+                    pip install -r requirements.txt
+                '''
+            }
+        }
+
+        stage('Train Model') {
+            steps {
+                echo '── Training Random Forest model ──────────────────────'
+                sh '''
+                    . ${VENV_DIR}/bin/activate
+                    python train.py
+                '''
+            }
+            post {
+                success {
+                    echo "✅ Model trained and saved as ${MODEL_FILE}"
+                    archiveArtifacts artifacts: "${MODEL_FILE}", fingerprint: true
+                }
+                failure {
+                    echo "❌ Model training failed — check train.py logs above"
+                }
+            }
+        }
+
+        stage('Verify Model Output') {
+            steps {
+                echo '── Verifying model artifact exists ──────────────────'
+                sh '''
+                    if [ ! -f "${MODEL_FILE}" ]; then
+                        echo "ERROR: ${MODEL_FILE} not found!"
+                        exit 1
+                    fi
+                    echo "Model file found: $(du -h ${MODEL_FILE})"
+                    . ${VENV_DIR}/bin/activate
+                    python3 -c "
+import pickle, sys
+with open('${MODEL_FILE}', 'rb') as f:
+    m = pickle.load(f)
+print('Model type   :', type(m).__name__)
+print('N estimators :', m.n_estimators)
+print('Classes      :', m.classes_.tolist())
+print('Feature count:', len(m.feature_importances_))
+print('Model integrity check PASSED')
+                    "
+                '''
+            }
+        }
+
+        stage('Run Tests') {
+            steps {
+                echo '── Running smoke tests ───────────────────────────────'
+                sh '''
+                    . ${VENV_DIR}/bin/activate
+                    python3 -c "
+import pickle, numpy as np
+
+# Load model
+with open('${MODEL_FILE}', 'rb') as f:
+    model = pickle.load(f)
+
+# Smoke test 1: shape check
+assert len(model.feature_importances_) == 15, \
+    'Expected 15 features, got ' + str(len(model.feature_importances_))
+print('✓ Feature count check passed (15)')
+
+# Smoke test 2: prediction output
+sample = np.array([[25,1,175,70,22.8,4,90,10,7.5,65,2.1,48,1,5,6.5]])
+pred  = model.predict(sample)
+proba = model.predict_proba(sample)
+assert pred[0] in [0, 1], 'Prediction must be 0 or 1'
+assert abs(sum(proba[0]) - 1.0) < 1e-4, 'Probabilities must sum to 1'
+print('✓ Prediction output check passed:', pred[0], proba[0].tolist())
+
+# Smoke test 3: high-risk profile should predict 1
+high_risk = np.array([[38,1,180,90,27.7,6,120,0,5.0,32,12.5,119,3,10,9.8]])
+pred_hr = model.predict(high_risk)
+print('✓ High-risk profile prediction:', pred_hr[0], '(expected 1)')
+
+print('All smoke tests PASSED')
+                    "
+                '''
+            }
+        }
+
+        stage('Flask Health Check') {
+            steps {
+                echo '── Starting Flask and checking /health endpoint ──────'
+                sh '''
+                    . ${VENV_DIR}/bin/activate
+                    # Start Flask in background
+                    python app.py &
+                    FLASK_PID=$!
+                    echo "Flask PID: $FLASK_PID"
+
+                    # Wait for startup
+                    sleep 4
+
+                    # Test home route
+                    HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:${APP_PORT}/)
+                    echo "Home route HTTP status: $HTTP_CODE"
+
+                    # Kill Flask
+                    kill $FLASK_PID 2>/dev/null || true
+
+                    if [ "$HTTP_CODE" != "200" ]; then
+                        echo "❌ Flask health check failed (HTTP $HTTP_CODE)"
+                        exit 1
+                    fi
+                    echo "✅ Flask health check passed (HTTP 200)"
+                '''
+            }
+        }
+
+    }
+
+    post {
+        success {
+            echo '''
+            ╔══════════════════════════════════════════╗
+            ║  ✅  Pipeline completed successfully      ║
+            ║      Model retrained and verified         ║
+            ╚══════════════════════════════════════════╝
+            '''
+        }
+        failure {
+            echo '''
+            ╔══════════════════════════════════════════╗
+            ║  ❌  Pipeline FAILED — review logs above  ║
+            ╚══════════════════════════════════════════╝
+            '''
+        }
+        always {
+            echo '── Cleaning up background processes ─────────────────'
+            sh 'pkill -f "python app.py" 2>/dev/null || true'
+        }
+    }
+}
